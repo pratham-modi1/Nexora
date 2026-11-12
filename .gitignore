@@ -15,9 +15,12 @@ backend/src/main/resources/application.properties
 .env
 .env.*
 !.env.example
+!.env.production
+
 **/.env
 **/.env.*
 !**/.env.example
+!**/.env.production
 
 # Logs
 *.log
