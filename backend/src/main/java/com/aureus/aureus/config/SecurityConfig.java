@@ -1,3 +1,4 @@
+
 package com.aureus.aureus.config;
 
 import com.aureus.aureus.repository.UserRepository;
@@ -29,27 +30,35 @@ import java.util.List;
 @Configuration
 public class SecurityConfig {
 
-    // Existing BCrypt bean: keep this.
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
 
-    // CORS: lets the Nexora frontend (Vite dev server) call this API from the browser.
-    // Override with: aureus.cors.allowed-origins=https://your-site.com,http://localhost:5173
     @Bean
     public CorsConfigurationSource corsConfigurationSource(
-            @Value("${aureus.cors.allowed-origins:http://localhost:5173,http://localhost:4173}")
+            @Value("${aureus.cors.allowed-origins:http://localhost:5173,http://localhost:4173,https://nexora-pink-mu.vercel.app,https://nexora-p-3bea.vercel.app,https://nexora-git-main-p-3bea.vercel.app}")
             List<String> allowedOrigins) {
 
         CorsConfiguration config = new CorsConfiguration();
+
         config.setAllowedOrigins(allowedOrigins);
-        config.setAllowedMethods(List.of("GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"));
-        config.setAllowedHeaders(List.of("Authorization", "Content-Type", "Idempotency-Key", "Accept"));
+
+        config.setAllowedMethods(
+                List.of("GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS")
+        );
+
+        config.setAllowedHeaders(
+                List.of("*")
+        );
+
         config.setMaxAge(3600L);
 
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        UrlBasedCorsConfigurationSource source =
+                new UrlBasedCorsConfigurationSource();
+
         source.registerCorsConfiguration("/api/**", config);
+
         return source;
     }
 
@@ -62,7 +71,6 @@ public class SecurityConfig {
             JsonAccessDeniedHandler accessDeniedHandler)
             throws Exception {
 
-        // Create JWT filter with its required dependencies.
         JwtAuthFilter jwtAuthFilter = new JwtAuthFilter(
                 jwtService,
                 userRepository,
@@ -70,44 +78,30 @@ public class SecurityConfig {
         );
 
         http
-
-            // 0. Enable CORS (uses the corsConfigurationSource bean above).
             .cors(Customizer.withDefaults())
 
-            // 1. Disable CSRF for stateless Bearer-token API.
             .csrf(csrf -> csrf.disable())
 
-            // 2. Disable browser-based authentication mechanisms.
             .formLogin(form -> form.disable())
             .httpBasic(basic -> basic.disable())
 
-            // 3. No HTTP sessions.
             .sessionManagement(session ->
                     session.sessionCreationPolicy(
                             SessionCreationPolicy.STATELESS
                     )
             )
 
-            // 4. Custom JSON 401 handler.
             .exceptionHandling(exception -> exception
                     .authenticationEntryPoint(authenticationEntryPoint)
                     .accessDeniedHandler(accessDeniedHandler)
             )
 
-            // 5. Endpoint authorization rules.
             .authorizeHttpRequests(auth -> auth
-
-                    // Registration and login are public.
                     .requestMatchers("/api/auth/**").permitAll()
-
-                    // Admin routes require an authenticated ADMIN role.
                     .requestMatchers("/api/admin/**").hasRole("ADMIN")
-
-                    // Everything else requires authentication.
                     .anyRequest().authenticated()
             )
 
-            // 6. Insert JWT filter into the security chain.
             .addFilterBefore(
                     jwtAuthFilter,
                     UsernamePasswordAuthenticationFilter.class
