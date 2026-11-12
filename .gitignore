@@ -1,0 +1,32 @@
+
+# Node dependencies
+node_modules/
+
+# Frontend build
+frontend/dist/
+
+# Backend build
+backend/target/
+
+# Local application configuration (contains credentials)
+backend/src/main/resources/application.properties
+
+# Environment files
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+
+# Logs
+*.log
+
+# IDE files
+.idea/
+.vscode/
+*.iml
+
+# OS files
+.DS_Store
+Thumbs.db
