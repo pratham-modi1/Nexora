@@ -4,10 +4,7 @@ package com.aureus.aureus.repository;
 import com.aureus.aureus.entity.Account;
 import com.aureus.aureus.entity.AccountType;
 
-import jakarta.persistence.LockModeType;
-
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -28,6 +25,7 @@ public interface AccountRepository
 
     List<Account> findByAccountType(AccountType accountType);
 
+
     /*
      * Fetch account IDs without loading complete Account entities.
      */
@@ -42,24 +40,54 @@ public interface AccountRepository
             @Param("accountType") AccountType accountType
     );
 
-    /*
-     * Existing locking query for customer's BANK and WALLET accounts.
-     */
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("""
-        SELECT a
-        FROM Account a
-        WHERE a.userId = :userId
-          AND a.accountType IN :accountTypes
-        ORDER BY a.accountId ASC
-        """)
-    List<Account> findCustomerAccountsForUpdate(
-            @Param("userId") Integer userId,
-            @Param("accountTypes") List<AccountType> accountTypes
-    );
 
     /*
-     * Existing conditional debit method.
+     * Native SQL locking query.
+     *
+     * TiDB/MySQL-compatible FOR UPDATE syntax is used instead
+     * of Hibernate's generated FOR UPDATE OF alias syntax.
+     *
+     * AccountType is stored using EnumType.STRING.
+     */
+    @Query(value = """
+        SELECT *
+        FROM account
+        WHERE user_id = :userId
+          AND account_type IN (:accountTypes)
+        ORDER BY account_id ASC
+        FOR UPDATE
+        """, nativeQuery = true)
+    List<Account> findCustomerAccountsForUpdateNative(
+            @Param("userId") Integer userId,
+            @Param("accountTypes") List<String> accountTypes
+    );
+
+
+    /*
+     * Compatibility wrapper.
+     *
+     * Keeps the original method signature so
+     * LedgerPostingService requires no modification.
+     */
+    default List<Account> findCustomerAccountsForUpdate(
+            Integer userId,
+            List<AccountType> accountTypes) {
+
+        List<String> accountTypeNames = accountTypes.stream()
+                .map(AccountType::name)
+                .toList();
+
+        return findCustomerAccountsForUpdateNative(
+                userId,
+                accountTypeNames
+        );
+    }
+
+
+    /*
+     * Conditional debit.
+     *
+     * Debit happens only when sufficient balance exists.
      */
     @Modifying(
         flushAutomatically = true,
@@ -77,26 +105,22 @@ public interface AccountRepository
     );
 
 
-
-
-    
     /*
      * Locks two wallet accounts belonging to potentially
      * different users.
      *
-     * Accounts are acquired in ascending account ID order
-     * to reduce the possibility of deadlocks.
+     * Account IDs are acquired in ascending order to reduce
+     * the possibility of deadlocks.
      */
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("""
-        SELECT a
-        FROM Account a
-        WHERE a.accountId IN :accountIds
-        ORDER BY a.accountId ASC
-        """)
+    @Query(value = """
+        SELECT *
+        FROM account
+        WHERE account_id IN (:accountIds)
+        ORDER BY account_id ASC
+        FOR UPDATE
+        """, nativeQuery = true)
     List<Account> lockWalletAccountsByIdsOrdered(
             @Param("accountIds") List<Integer> accountIds
     );
 
 }
-
